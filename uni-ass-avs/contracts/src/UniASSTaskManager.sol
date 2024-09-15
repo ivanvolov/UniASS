@@ -12,7 +12,7 @@ import {OperatorStateRetriever} from "../lib/eigenlayer-middleware/src/OperatorS
 import "../lib/eigenlayer-middleware/src/libraries/BN254.sol";
 import "./IUniASSTaskManager.sol";
 
-import "../../../src/interfaces/IOption.sol";
+// import "../../../src/interfaces/IOption.sol";
 
 import "../lib/forge-std/src/console.sol";
 
