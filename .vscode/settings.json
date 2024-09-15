@@ -1,0 +1,27 @@
+{
+  "files.exclude": {
+    // "**/node_modules": true,
+    // "**/artifacts": true,
+    // "**/cache": true,
+    // "**/external": true,
+    // // "**/.vscode": true,
+    // "**/.github": true,
+    // "**/cspell.dict": true,
+    // "**/out": true,
+    // // "**/lib": true,
+    // "**/.git": true,
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/out": true,
+    "**/.git": true,
+    // "**/lib": true
+  },
+  "git.ignoredRepositories": [
+    "lib/forge-std",
+    "lib/v4-core",
+    "lib/eigenlayer-middleware",
+    "lib/v4-periphery"
+  ],
+  "cSpell.enabled": true
+}
