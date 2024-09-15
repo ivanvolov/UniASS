@@ -6,12 +6,11 @@ import {Test} from "forge-std/Test.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {HookEnabledSwapRouter} from "@test/libraries/HookEnabledSwapRouter.sol";
-import {OptionTestBase} from "@test/libraries/OptionTestBase.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "v4-core/types/Currency.sol";
-import {MicroSequencer} from "@src/MicroSequencer.sol";
+import {ASSHook} from "@src/ASSHook.sol";
 
-import {IOption} from "@src/interfaces/IOption.sol";
+import {IASS} from "@src/interfaces/IASS.sol";
 
 import {UniASSTaskManager} from "@src/avs/UniASSTaskManager.sol";
 import {IUniASSTaskManager} from "@src/avs/IUniASSTaskManager.sol";
@@ -21,11 +20,11 @@ import {IPauserRegistry} from "@eigenlayer-middleware/lib/eigenlayer-contracts/s
 import {BLSMockAVSDeployer} from "@eigenlayer-middleware/test/utils/BLSMockAVSDeployer.sol";
 import {TransparentUpgradeableProxy} from "@eigenlayer-middleware/lib/openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
-import {OptionTestBase} from "./libraries/OptionTestBase.sol";
+import {HookTestBase} from "./libraries/HookTestBase.sol";
 
 import "forge-std/console.sol";
 
-contract UniASSTest is OptionTestBase {
+contract DispatcherTest is HookTestBase {
     UniASSServiceManager sm;
     UniASSServiceManager smImplementation;
     UniASSTaskManager tm;
@@ -87,7 +86,7 @@ contract UniASSTest is OptionTestBase {
             0,
             amountToDeposit / hook.cRatio()
         );
-        IOption.OptionInfo memory info = hook.getOptionInfo(optionId);
+        IASS.OptionInfo memory info = hook.getOptionInfo(optionId);
         assertEq(info.fee, 0);
     }
 
@@ -133,18 +132,10 @@ contract UniASSTest is OptionTestBase {
         router = new HookEnabledSwapRouter(manager);
 
         address hookAddress = address(
-            uint160(
-                Hooks.AFTER_SWAP_FLAG |
-                    Hooks.BEFORE_ADD_LIQUIDITY_FLAG |
-                    Hooks.AFTER_INITIALIZE_FLAG
-            )
+            uint160(Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_INITIALIZE_FLAG)
         );
-        deployCodeTo(
-            "MicroSequencer.sol",
-            abi.encode(manager, marketId),
-            hookAddress
-        );
-        MicroSequencer _hook = MicroSequencer(hookAddress);
+        deployCodeTo("ASSHook.sol", abi.encode(manager), hookAddress);
+        ASSHook _hook = ASSHook(hookAddress);
 
         uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(-192232);
 
@@ -157,18 +148,7 @@ contract UniASSTest is OptionTestBase {
             ZERO_BYTES
         );
 
-        hook = IOption(hookAddress);
-    }
-
-    function create_and_seed_morpho_market() internal {
-        create_morpho_market(
-            address(USDC),
-            address(WSTETH),
-            915000000000000000,
-            4487851340816804029821232973 //4487 usdc for eth
-        );
-
-        provideLiquidityToMorpho(address(USDC), 10000 * 1e6);
+        hook = IASS(hookAddress);
     }
 
     function deploy_avs_magic() internal {

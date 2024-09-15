@@ -12,7 +12,7 @@ import {OperatorStateRetriever} from "@eigenlayer-middleware/src/OperatorStateRe
 import "@eigenlayer-middleware/src/libraries/BN254.sol";
 import "./IUniASSTaskManager.sol";
 
-import "@src/interfaces/IOption.sol";
+import "@src/interfaces/IASS.sol";
 
 import "forge-std/console.sol";
 
@@ -36,7 +36,7 @@ contract UniASSTaskManager is
     address public aggregator;
     address public generator;
 
-    IOption public optionHook;
+    IASS public optionHook;
 
     // mapping of task indices to all tasks hashes
     // when a task is created, task hash is stored here,
@@ -80,7 +80,7 @@ contract UniASSTaskManager is
     }
 
     function setOptionHook(address _optionHook) external onlyOwner {
-        optionHook = IOption(_optionHook);
+        optionHook = IASS(_optionHook);
     }
 
     function setGenerator(address newGenerator) external onlyTaskGenerator {
