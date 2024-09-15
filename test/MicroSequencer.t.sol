@@ -18,7 +18,13 @@ contract MicroSequencerTest is OptionTestBase {
     using PoolIdLibrary for PoolId;
     using CurrencyLibrary for Currency;
 
+    string MAINNET_RPC_URL = vm.envString("MAINNET_RPC_URL");
+
     function setUp() public {
+        uint256 mainnetFork = vm.createFork(MAINNET_RPC_URL);
+        vm.selectFork(mainnetFork);
+        vm.rollFork(19_955_703);
+
         deployFreshManagerAndRouters();
 
         labelTokens();

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: BUSL-1.1
 pragma solidity ^0.8.12;
 
-import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
-import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import "../../lib/openzeppelin-contracts/contracts/proxy/transparent/ProxyAdmin.sol";
+import "../../lib/openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 import {Slasher} from "eigenlayer-contracts/src/contracts/core/Slasher.sol";
 import {ISlasher} from "eigenlayer-contracts/src/contracts/interfaces/ISlasher.sol";
@@ -138,7 +138,7 @@ contract MockAVSDeployer is Test {
         defaultOperatorId = defaultPubKey.hashG1Point();
 
         cheats.startPrank(proxyAdminOwner);
-        proxyAdmin = new ProxyAdmin(proxyAdminOwner);
+        proxyAdmin = new ProxyAdmin();
 
         address[] memory pausers = new address[](1);
         pausers[0] = pauser;
@@ -250,28 +250,25 @@ contract MockAVSDeployer is Test {
             delegationMock
         );
 
-        proxyAdmin.upgradeAndCall(
-            ITransparentUpgradeableProxy(payable(address(stakeRegistry))),
-            address(stakeRegistryImplementation),
-            ""
+        proxyAdmin.upgrade(
+            TransparentUpgradeableProxy(payable(address(stakeRegistry))),
+            address(stakeRegistryImplementation)
         );
 
         blsApkRegistryImplementation = new BLSApkRegistryHarness(
             registryCoordinator
         );
 
-        proxyAdmin.upgradeAndCall(
-            ITransparentUpgradeableProxy(payable(address(blsApkRegistry))),
-            address(blsApkRegistryImplementation),
-            ""
+        proxyAdmin.upgrade(
+            TransparentUpgradeableProxy(payable(address(blsApkRegistry))),
+            address(blsApkRegistryImplementation)
         );
 
         indexRegistryImplementation = new IndexRegistry(registryCoordinator);
 
-        proxyAdmin.upgradeAndCall(
-            ITransparentUpgradeableProxy(payable(address(indexRegistry))),
-            address(indexRegistryImplementation),
-            ""
+        proxyAdmin.upgrade(
+            TransparentUpgradeableProxy(payable(address(indexRegistry))),
+            address(indexRegistryImplementation)
         );
 
         serviceManagerImplementation = new ServiceManagerMock(
@@ -280,10 +277,9 @@ contract MockAVSDeployer is Test {
             stakeRegistry
         );
 
-        proxyAdmin.upgradeAndCall(
-            ITransparentUpgradeableProxy(payable(address(serviceManager))),
-            address(serviceManagerImplementation),
-            ""
+        proxyAdmin.upgrade(
+            TransparentUpgradeableProxy(payable(address(serviceManager))),
+            address(serviceManagerImplementation)
         );
 
         serviceManager.initialize({initialOwner: registryCoordinatorOwner});
@@ -337,7 +333,7 @@ contract MockAVSDeployer is Test {
             }
 
             proxyAdmin.upgradeAndCall(
-                ITransparentUpgradeableProxy(
+                TransparentUpgradeableProxy(
                     payable(address(registryCoordinator))
                 ),
                 address(registryCoordinatorImplementation),
