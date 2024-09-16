@@ -58,7 +58,12 @@ contract DispatcherTest is HookTestBase {
         create_and_approve_accounts();
 
         vm.prank(tm.owner());
-        tm.setOptionHook(address(hook));
+        tm.setDispatcherHook(address(hook));
+
+        vm.prank(swapper.addr);
+        TOKEN1.approve(address(tm), type(uint256).max);
+        vm.prank(swapper.addr);
+        TOKEN2.approve(address(tm), type(uint256).max);
     }
 
     function test_addLiquidity() public {
@@ -107,6 +112,7 @@ contract DispatcherTest is HookTestBase {
         vm.startPrank(swapper.addr);
         uint256 amountOut = 1 ether;
         IASS.SwapTransactionData memory data = IASS.SwapTransactionData(
+            swapper.addr,
             key,
             IPoolManager.SwapParams(
                 true, // TOKEN1 -> TOKEN2
@@ -114,7 +120,9 @@ contract DispatcherTest is HookTestBase {
                 TickMath.MIN_SQRT_PRICE + 1
             ),
             HookEnabledSwapRouter.TestSettings(false, false),
-            ZERO_BYTES
+            ZERO_BYTES,
+            address(TOKEN1),
+            address(TOKEN2)
         );
         bytes32 txHash = hook.hashSwapTransactionData(data);
         bytes memory signature = swapper.signPacked(txHash);
@@ -125,76 +133,109 @@ contract DispatcherTest is HookTestBase {
         vm.stopPrank();
     }
 
-    // function test_CreateNewTask() public {
-    //     vm.prank(generator);
-    //     tm.createNewTask(0, generator);
-    //     assertEq(tm.latestTaskNum(), 1);
-    // }
+    function test_CreateNewSwapTask_invalid_signature() public {
+        IASS.SwapTransactionData[]
+            memory swapTransactions = new IASS.SwapTransactionData[](1);
+        IASS.SwapTransactionData memory data = IASS.SwapTransactionData(
+            swapper.addr,
+            key,
+            IPoolManager.SwapParams(
+                true, // TOKEN1 -> TOKEN2
+                -int256(1 ether),
+                TickMath.MIN_SQRT_PRICE + 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES,
+            address(TOKEN1),
+            address(TOKEN2)
+        );
+        swapTransactions[0] = data;
 
-    // function test_simulateWatchTowerEmptyCreateTasks() public {
-    //     vm.prank(generator);
-    //     tm.createRebalanceTask();
-    //     assertEq(tm.latestTaskNum(), 0);
-    // }
+        bytes[] memory transactionSignatures = new bytes[](1);
+        transactionSignatures[0] = "sdskds;sdd;s";
 
-    // function test_deposit() public {
-    //     uint256 amountToDeposit = 100 ether;
-    //     deal(address(TOKEN1), address(alice.addr), amountToDeposit);
-    //     vm.prank(alice.addr);
-    //     optionId = hook.deposit(key, amountToDeposit, alice.addr);
+        vm.prank(generator);
+        vm.expectRevert();
+        tm.createSwapTask(swapTransactions, transactionSignatures);
+    }
 
-    //     assertOptionV4PositionLiquidity(optionId, 11433916692172150);
-    //     assertEqBalanceStateZero(alice.addr);
-    //     assertEqBalanceStateZero(address(hook));
-    //     assertEqMorphoState(
-    //         address(hook),
-    //         0,
-    //         0,
-    //         amountToDeposit / hook.cRatio()
-    //     );
-    //     IASS.OptionInfo memory info = hook.getOptionInfo(optionId);
-    //     assertEq(info.fee, 0);
-    // }
+    function test_CreateNewSwapTask_sender_mismatch() public {
+        IASS.SwapTransactionData[]
+            memory swapTransactions = new IASS.SwapTransactionData[](1);
+        IASS.SwapTransactionData memory data = IASS.SwapTransactionData(
+            alice.addr,
+            key,
+            IPoolManager.SwapParams(
+                true, // TOKEN1 -> TOKEN2
+                -int256(1 ether),
+                TickMath.MIN_SQRT_PRICE + 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES,
+            address(TOKEN1),
+            address(TOKEN2)
+        );
+        swapTransactions[0] = data;
 
-    // function test_swap_price_up() public {
-    //     test_deposit();
+        bytes[] memory transactionSignatures = new bytes[](1);
+        transactionSignatures[0] = swapper.signPacked(
+            hook.hashSwapTransactionData(swapTransactions[0])
+        );
 
-    //     deal(address(TOKEN2), address(swapper.addr), 4513632092);
+        vm.prank(generator);
+        vm.expectRevert();
+        tm.createSwapTask(swapTransactions, transactionSignatures);
+    }
 
-    //     swapTOKEN2_TOKEN1_Out(1 ether);
+    function test_CreateNewSwapTask()
+        public
+        returns (IUniASSTaskManager.Task memory)
+    {
+        IASS.SwapTransactionData[]
+            memory swapTransactions = new IASS.SwapTransactionData[](1);
+        IASS.SwapTransactionData memory data = IASS.SwapTransactionData(
+            swapper.addr,
+            key,
+            IPoolManager.SwapParams(
+                true, // TOKEN1 -> TOKEN2
+                -int256(1 ether),
+                TickMath.MIN_SQRT_PRICE + 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES,
+            address(TOKEN1),
+            address(TOKEN2)
+        );
+        swapTransactions[0] = data;
 
-    //     assertEqBalanceState(swapper.addr, 1 ether, 0);
-    //     assertEqBalanceState(address(hook), 0, 0, 0, 16851686274526807531);
-    //     assertEqMorphoState(address(hook), 0, 4513632092000000, 50 ether);
-    // }
+        bytes[] memory transactionSignatures = new bytes[](1);
+        transactionSignatures[0] = swapper.signPacked(
+            hook.hashSwapTransactionData(swapTransactions[0])
+        );
 
-    // function test_simulateWatchTowerCreateTasks() public {
-    //     test_swap_price_up();
+        vm.prank(generator);
+        IUniASSTaskManager.Task memory task = tm.createSwapTask(
+            swapTransactions,
+            transactionSignatures
+        );
+        assertEq(tm.latestTaskNum(), 1);
+        return task;
+    }
 
-    //     vm.prank(generator);
-    //     tm.createRebalanceTask();
-    //     assertEq(tm.latestTaskNum(), 1);
-    // }
+    function test_watchtower_rebalance() public {
+        test_addLiquidity();
 
-    // function test_swap_price_up_then_watchtower_rebalance() public {
-    //     test_swap_price_up();
+        IUniASSTaskManager.Task memory task = test_CreateNewSwapTask();
 
-    //     vm.prank(generator);
-    //     tm.createRebalanceTask();
-    //     assertEq(tm.latestTaskNum(), 1);
-
-    //     vm.prank(generator);
-    //     hook.priceRebalance(key, 0);
-
-    //     assertEqBalanceState(address(hook), 0, 0);
-    //     assertEqBalanceState(alice.addr, 0, 0);
-    //     assertOptionV4PositionLiquidity(optionId, 0);
-    //     assertEqMorphoState(address(hook), 0, 0, 49999736322669483551);
-    // }
+        deal(address(TOKEN1), address(swapper.addr), 1 ether);
+        assertEqBalanceState(swapper.addr, 1 ether, 0);
+        IUniASSTaskManager.TaskResponse memory taskResponse = IUniASSTaskManager
+            .TaskResponse(0, address(router));
+        vm.prank(aggregator);
+        tm.respondToTask(task, taskResponse);
+    }
 
     // -- Helpers --
-
-    //https://github.com/haardikk21/take-profits-hook/blob/main/test/TakeProfitshook.t.sol
     function init_hook() internal {
         router = new HookEnabledSwapRouter(manager);
 
@@ -214,6 +255,8 @@ contract DispatcherTest is HookTestBase {
         );
 
         hook = IASS(hookAddress);
+
+        hook.changeDispatcher(address(router), hookAddress);
     }
 
     function deploy_avs_magic() internal {

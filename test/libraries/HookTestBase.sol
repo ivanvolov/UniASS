@@ -5,12 +5,8 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 
 import {TickMath} from "v4-core/libraries/TickMath.sol";
-import {MarketParamsLib} from "@forks/morpho/MarketParamsLib.sol";
-import {OptionBaseLib} from "@src/libraries/OptionBaseLib.sol";
 
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
-import {IChainlinkOracle} from "@forks/morpho-oracles/IChainlinkOracle.sol";
-import {IMorpho, MarketParams, Position as MorphoPosition, Id} from "@forks/morpho/IMorpho.sol";
 import {IASS} from "@src/interfaces/IASS.sol";
 
 import {TestERC20} from "v4-core/test/TestERC20.sol";

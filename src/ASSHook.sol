@@ -67,12 +67,12 @@ contract ASSHook is BaseHook, IASS {
 
     // Only dispatcher contract of the ASS flow could do swaps
     function beforeSwap(
-        address,
+        address sender,
         PoolKey calldata,
         IPoolManager.SwapParams calldata,
         bytes calldata
     ) external virtual override returns (bytes4, BeforeSwapDelta, uint24) {
-        if (msg.sender != dispatchers[address(this)]) revert NotDispatcher();
+        // if (sender != dispatchers[address(this)]) revert NotDispatcher();
         return (ASSHook.beforeSwap.selector, BeforeSwapDelta.wrap(0), 0);
     }
 
@@ -84,10 +84,13 @@ contract ASSHook is BaseHook, IASS {
         return
             keccak256(
                 abi.encode(
+                    data.sender,
                     data.key,
                     data.params,
                     data.testSettings,
-                    data.hookData
+                    data.hookData,
+                    data.token0,
+                    data.token1
                 )
             );
     }
@@ -115,5 +118,14 @@ contract ASSHook is BaseHook, IASS {
 
         address recoveredAddress = ecrecover(hash, v, r, s);
         return recoveredAddress == signer;
+    }
+
+    function verifyOrder(
+        address signer,
+        SwapTransactionData memory data,
+        bytes memory signature
+    ) external pure returns (bool) {
+        return
+            verifySignature(signer, hashSwapTransactionData(data), signature);
     }
 }

@@ -13,6 +13,8 @@ import {OperatorStateRetriever} from "@eigenlayer-middleware/src/OperatorStateRe
 import "@eigenlayer-middleware/src/libraries/BN254.sol";
 import "./IUniASSTaskManager.sol";
 
+import {HookEnabledSwapRouter} from "@test/libraries/HookEnabledSwapRouter.sol";
+import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import "@src/interfaces/IASS.sol";
 
 import "forge-std/console.sol";
@@ -27,7 +29,8 @@ contract UniASSTaskManager is
 {
     using BN254 for BN254.G1Point;
 
-    /* CONSTANT */
+    error OrderSignatureMismatch();
+
     // The number of blocks from the task initialization within which the aggregator has to respond to
     uint32 public immutable TASK_RESPONSE_WINDOW_BLOCK = 100;
 
@@ -37,18 +40,13 @@ contract UniASSTaskManager is
     address public aggregator;
     address public generator;
 
-    IASS public optionHook;
+    IASS public assHook;
 
-    // mapping of task indices to all tasks hashes
-    // when a task is created, task hash is stored here,
-    // and responses need to pass the actual task,
-    // which is hashed onchain and checked against this mapping
     mapping(uint32 => bytes32) public allTaskHashes;
 
     // mapping of task indices to hash of abi.encode(taskResponse, taskResponseMetadata)
     mapping(uint32 => bytes32) public allTaskResponses;
 
-    /* MODIFIERS */
     modifier onlyAggregator() {
         require(msg.sender == aggregator, "Aggregator must be the caller");
         _;
@@ -80,40 +78,58 @@ contract UniASSTaskManager is
         generator = _generator;
     }
 
-    function setOptionHook(address _optionHook) external onlyOwner {
-        optionHook = IASS(_optionHook);
+    function setDispatcherHook(address _assHook) external onlyOwner {
+        assHook = IASS(_assHook);
     }
 
     function setGenerator(address newGenerator) external onlyTaskGenerator {
         generator = newGenerator;
     }
 
-    // Anybody could call it, but the task will be emitted for all keepers to take
-    // Also the calling keeper will have a time window to respond to the task
-    function createRebalanceTask() external {
-        // for (uint256 i = 0; i < optionHook.optionIdCounter(); i++) {
-        //     PoolKey memory key = optionHook.getOptionInfo(i).key;
-        //     if (optionHook.isPriceRebalance(key, i)) {
-        //         createNewTask(i, msg.sender);
-        //     }
-        // }
+    function createSwapTask(
+        IASS.SwapTransactionData[] memory swapTransactions,
+        bytes[] memory transactionSignatures
+    ) external onlyTaskGenerator returns (Task memory) {
+        for (uint256 i = 0; i < swapTransactions.length; i++) {
+            IASS.SwapTransactionData memory data = swapTransactions[i];
+            if (
+                !assHook.verifyOrder(
+                    data.sender,
+                    data,
+                    transactionSignatures[i]
+                )
+            ) revert OrderSignatureMismatch();
+        }
+
+        return _createNewTask(swapTransactions, transactionSignatures);
     }
 
     /* FUNCTIONS */
     // NOTE: this function creates new auction task, assigns it a taskId
-    function createNewTask(uint256 optionId, address firstResponder) public {
+    function createNewTask(
+        IASS.SwapTransactionData[] memory swapTransactions,
+        bytes[] memory transactionSignatures
+    ) public onlyTaskGenerator {
+        _createNewTask(swapTransactions, transactionSignatures);
+    }
+
+    function _createNewTask(
+        IASS.SwapTransactionData[] memory swapTransactions,
+        bytes[] memory transactionSignatures
+    ) internal returns (Task memory) {
         console.log("createNewTask");
         // create a new task struct
         Task memory newTask;
-        newTask.optionId = optionId;
-        newTask.firstResponder = firstResponder;
+        newTask.swapTransactions = swapTransactions;
+        newTask.transactionSignatures = transactionSignatures;
         newTask.created = block.number;
 
         allTaskHashes[latestTaskNum] = keccak256(abi.encode(newTask));
 
-        emit NewTaskCreated(latestTaskNum, optionId);
+        emit NewTaskCreated(latestTaskNum, swapTransactions.length);
 
         latestTaskNum = latestTaskNum + 1;
+        return newTask;
     }
 
     // NOTE: this function responds to existing tasks.
@@ -121,12 +137,6 @@ contract UniASSTaskManager is
         Task calldata task,
         TaskResponse calldata taskResponse
     ) external onlyAggregator {
-        uint256 optionId = task.optionId;
-
-        require(
-            task.optionId == taskResponse.optionId,
-            "Error: optionId mismatch"
-        );
         require(
             keccak256(abi.encode(task)) ==
                 allTaskHashes[taskResponse.referenceTaskIndex],
@@ -137,16 +147,11 @@ contract UniASSTaskManager is
             "Aggregator has already responded to the task"
         );
 
-        // Here is the logic what allows only firstResponder to respond to the task in the given time window
-        // After this anybody could respond. Also firstResponder should be penalized if not responded in time
-        require(
-            task.firstResponder == msg.sender &&
-                block.timestamp < task.created + TASK_RESPONSE_WINDOW_BLOCK,
-            "Only first responder can respond to the task"
-        );
+        getSwapAmountsIn(task.swapTransactions);
+        dispatchAllSwap(task.swapTransactions, taskResponse);
+        sendSwapAmountsOut(task.swapTransactions);
 
         TaskResponseMetadata memory taskResponseMetadata = TaskResponseMetadata(
-            optionId,
             block.timestamp
         );
         // updating the storage with task responsea
@@ -156,6 +161,71 @@ contract UniASSTaskManager is
 
         // emitting event
         emit TaskResponded(taskResponse, taskResponseMetadata);
+    }
+
+    function getSwapAmountsIn(
+        IASS.SwapTransactionData[] memory swapTransactions
+    ) internal {
+        for (uint256 i = 0; i < swapTransactions.length; i++) {
+            IASS.SwapTransactionData memory data = swapTransactions[i];
+            uint256 amountSpecified = data.params.amountSpecified < 0
+                ? uint256(-data.params.amountSpecified)
+                : uint256(data.params.amountSpecified);
+            console.log(">", amountSpecified);
+            console.log(">", data.params.zeroForOne);
+            if (data.params.zeroForOne == true) {
+                IERC20Minimal(data.token0).transferFrom(
+                    data.sender,
+                    address(this),
+                    amountSpecified
+                );
+            } else {
+                IERC20Minimal(data.token1).transferFrom(
+                    data.sender,
+                    address(this),
+                    amountSpecified
+                );
+            }
+        }
+    }
+
+    function sendSwapAmountsOut(
+        IASS.SwapTransactionData[] memory swapTransactions
+    ) internal {
+        // for (uint256 i = 0; i < swapTransactions.length; i++) {
+        //     IASS.SwapTransactionData memory data = swapTransactions[i];
+        //     uint256 amountSpecified = data.params.amountSpecified < 0
+        //         ? uint256(-data.params.amountSpecified)
+        //         : uint256(data.params.amountSpecified);
+        //     if (data.params.zeroForOne == true) {
+        //         IERC20Minimal(data.token0).transferFrom(
+        //             data.sender,
+        //             address(this),
+        //             amountSpecified
+        //         );
+        //     } else {
+        //         IERC20Minimal(data.token1).transferFrom(
+        //             data.sender,
+        //             address(this),
+        //             amountSpecified
+        //         );
+        //     }
+        // }
+    }
+
+    function dispatchAllSwap(
+        IASS.SwapTransactionData[] memory swapTransactions,
+        TaskResponse calldata taskResponse
+    ) internal {
+        for (uint256 i = 0; i < swapTransactions.length; i++) {
+            IASS.SwapTransactionData memory data = swapTransactions[i];
+            HookEnabledSwapRouter(taskResponse.router).swap(
+                data.key,
+                data.params,
+                data.testSettings,
+                data.hookData
+            );
+        }
     }
 
     function taskNumber() external view returns (uint32) {

@@ -10,11 +10,16 @@ interface IASS {
     error NotOwner();
 
     struct SwapTransactionData {
+        address sender;
         PoolKey key;
         IPoolManager.SwapParams params;
         HookEnabledSwapRouter.TestSettings testSettings;
         bytes hookData;
+        address token0;
+        address token1;
     }
+
+    function changeDispatcher(address newDispatcher, address pool) external;
 
     function hashSwapTransactionData(
         SwapTransactionData memory data
@@ -23,6 +28,12 @@ interface IASS {
     function verifySignature(
         address signer,
         bytes32 hash,
+        bytes memory signature
+    ) external pure returns (bool);
+
+    function verifyOrder(
+        address signer,
+        SwapTransactionData memory data,
         bytes memory signature
     ) external pure returns (bool);
 }

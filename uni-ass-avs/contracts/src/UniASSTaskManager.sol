@@ -36,7 +36,7 @@ contract UniASSTaskManager is
     address public aggregator;
     address public generator;
 
-    IASS public optionHook;
+    IASS public assHook;
 
     // mapping of task indices to all tasks hashes
     // when a task is created, task hash is stored here,
@@ -79,8 +79,8 @@ contract UniASSTaskManager is
         generator = _generator;
     }
 
-    function setOptionHook(address _optionHook) external onlyOwner {
-        optionHook = IASS(_optionHook);
+    function setDispatcherHook(address _assHook) external onlyOwner {
+        assHook = IASS(_assHook);
     }
 
     function setGenerator(address newGenerator) external onlyTaskGenerator {
@@ -90,9 +90,9 @@ contract UniASSTaskManager is
     // Anybody could call it, but the task will be emitted for all keepers to take
     // Also the calling keeper will have a time window to respond to the task
     function createRebalanceTask() external {
-        for (uint256 i = 0; i < optionHook.optionIdCounter(); i++) {
-            PoolKey memory key = optionHook.getOptionInfo(i).key;
-            if (optionHook.isPriceRebalance(key, i)) {
+        for (uint256 i = 0; i < assHook.optionIdCounter(); i++) {
+            PoolKey memory key = assHook.getOptionInfo(i).key;
+            if (assHook.isPriceRebalance(key, i)) {
                 createNewTask(i, msg.sender);
             }
         }
