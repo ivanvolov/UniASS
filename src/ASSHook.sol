@@ -75,4 +75,45 @@ contract ASSHook is BaseHook, IASS {
         if (msg.sender != dispatchers[address(this)]) revert NotDispatcher();
         return (ASSHook.beforeSwap.selector, BeforeSwapDelta.wrap(0), 0);
     }
+
+    // ---- Transaction signing and verification ---- //
+
+    function hashSwapTransactionData(
+        SwapTransactionData memory data
+    ) public pure override returns (bytes32) {
+        return
+            keccak256(
+                abi.encode(
+                    data.key,
+                    data.params,
+                    data.testSettings,
+                    data.hookData
+                )
+            );
+    }
+
+    function verifySignature(
+        address signer,
+        bytes32 hash,
+        bytes memory signature
+    ) public pure returns (bool) {
+        require(signature.length == 65, "Invalid signature length");
+
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+
+        assembly {
+            r := mload(add(signature, 32))
+            s := mload(add(signature, 64))
+            v := byte(0, mload(add(signature, 96)))
+        }
+
+        if (v < 27) {
+            v += 27;
+        }
+
+        address recoveredAddress = ecrecover(hash, v, r, s);
+        return recoveredAddress == signer;
+    }
 }

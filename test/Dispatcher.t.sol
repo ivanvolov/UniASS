@@ -10,7 +10,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "v4-core/types/Currency.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {ASSHook} from "@src/ASSHook.sol";
-
+import {TestAccount, TestAccountLib} from "@test/libraries/TestAccountLib.t.sol";
 import {IASS} from "@src/interfaces/IASS.sol";
 
 import {UniASSTaskManager} from "@src/avs/UniASSTaskManager.sol";
@@ -43,6 +43,7 @@ contract DispatcherTest is HookTestBase {
     using PoolIdLibrary for PoolId;
     using CurrencyLibrary for Currency;
     using StateLibrary for IPoolManager;
+    using TestAccountLib for TestAccount;
 
     function setUp() public {
         uint256 mainnetFork = vm.createFork(MAINNET_RPC_URL);
@@ -77,28 +78,50 @@ contract DispatcherTest is HookTestBase {
             }),
             ZERO_BYTES
         );
-        // // Some liquidity from -120 to +120 tick range
-        // modifyLiquidityRouter.modifyLiquidity(
-        //     key,
-        //     IPoolManager.ModifyLiquidityParams({
-        //         tickLower: -120,
-        //         tickUpper: 120,
-        //         liquidityDelta: 10 ether,
-        //         salt: bytes32(0)
-        //     }),
-        //     ZERO_BYTES
-        // );
-        // // some liquidity for full range
-        // modifyLiquidityRouter.modifyLiquidity(
-        //     key,
-        //     IPoolManager.ModifyLiquidityParams({
-        //         tickLower: TickMath.minUsableTick(60),
-        //         tickUpper: TickMath.maxUsableTick(60),
-        //         liquidityDelta: 10 ether,
-        //         salt: bytes32(0)
-        //     }),
-        //     ZERO_BYTES
-        // );
+        // Some liquidity from -120 to +120 tick range
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower: -120,
+                tickUpper: 120,
+                liquidityDelta: 10 ether,
+                salt: bytes32(0)
+            }),
+            ZERO_BYTES
+        );
+        // some liquidity for full range
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower: TickMath.minUsableTick(60),
+                tickUpper: TickMath.maxUsableTick(60),
+                liquidityDelta: 10 ether,
+                salt: bytes32(0)
+            }),
+            ZERO_BYTES
+        );
+        vm.stopPrank();
+    }
+
+    function test_tx_signing() public {
+        vm.startPrank(swapper.addr);
+        uint256 amountOut = 1 ether;
+        IASS.SwapTransactionData memory data = IASS.SwapTransactionData(
+            key,
+            IPoolManager.SwapParams(
+                true, // TOKEN1 -> TOKEN2
+                int256(amountOut),
+                TickMath.MIN_SQRT_PRICE + 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES
+        );
+        bytes32 txHash = hook.hashSwapTransactionData(data);
+        bytes memory signature = swapper.signPacked(txHash);
+
+        bool isValid = hook.verifySignature(swapper.addr, txHash, signature);
+        assertTrue(isValid);
+
         vm.stopPrank();
     }
 
