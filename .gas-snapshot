@@ -1,0 +1,6 @@
+DispatcherTest:test_CreateNewSwapTask() (gas: 162548)
+DispatcherTest:test_CreateNewSwapTask_invalid_signature() (gas: 52953)
+DispatcherTest:test_CreateNewSwapTask_sender_mismatch() (gas: 68547)
+DispatcherTest:test_addLiquidity() (gas: 875983)
+DispatcherTest:test_tx_signing() (gas: 34911)
+DispatcherTest:test_watchtower_rebalance() (gas: 1345724)

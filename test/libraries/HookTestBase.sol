@@ -26,6 +26,7 @@ abstract contract HookTestBase is Test, Deployers {
 
     TestAccount alice;
     TestAccount swapper;
+    TestAccount swapper2;
 
     HookEnabledSwapRouter router;
 
@@ -39,6 +40,7 @@ abstract contract HookTestBase is Test, Deployers {
     function create_and_approve_accounts() public {
         alice = TestAccountLib.createTestAccount("alice");
         swapper = TestAccountLib.createTestAccount("swapper");
+        swapper2 = TestAccountLib.createTestAccount("swapper2");
 
         vm.startPrank(alice.addr);
         batchApprove(TOKEN1);
@@ -46,6 +48,11 @@ abstract contract HookTestBase is Test, Deployers {
         vm.stopPrank();
 
         vm.startPrank(swapper.addr);
+        TOKEN1.approve(address(router), type(uint256).max);
+        TOKEN2.approve(address(router), type(uint256).max);
+        vm.stopPrank();
+
+        vm.startPrank(swapper2.addr);
         TOKEN1.approve(address(router), type(uint256).max);
         TOKEN2.approve(address(router), type(uint256).max);
         vm.stopPrank();

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
 
-import "../lib/eigenlayer-middleware/lib/eigenlayer-contracts/src/contracts/libraries/BytesLib.sol";
+import "../../../lib/eigenlayer-middleware/lib/eigenlayer-contracts/src/contracts/libraries/BytesLib.sol";
 import "./IUniASSTaskManager.sol";
 import "../lib/eigenlayer-middleware/src/ServiceManagerBase.sol";
 
@@ -24,14 +24,7 @@ contract UniASSServiceManager is ServiceManagerBase {
         IRegistryCoordinator _registryCoordinator,
         IStakeRegistry _stakeRegistry,
         IUniASSTaskManager _UniASSTaskManager
-    )
-        ServiceManagerBase(
-            _avsDirectory,
-            IPaymentCoordinator(address(0)), // inc-sq doesn't need to deal with payments
-            _registryCoordinator,
-            _stakeRegistry
-        )
-    {
+    ) ServiceManagerBase(_avsDirectory, _registryCoordinator, _stakeRegistry) {
         UniASSTaskManager = _UniASSTaskManager;
     }
 

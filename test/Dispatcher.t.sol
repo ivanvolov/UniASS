@@ -64,6 +64,10 @@ contract DispatcherTest is HookTestBase {
         TOKEN1.approve(address(tm), type(uint256).max);
         vm.prank(swapper.addr);
         TOKEN2.approve(address(tm), type(uint256).max);
+        vm.prank(swapper2.addr);
+        TOKEN1.approve(address(tm), type(uint256).max);
+        vm.prank(swapper2.addr);
+        TOKEN2.approve(address(tm), type(uint256).max);
 
         console.log("Task Manager address", address(tm));
     }
@@ -224,6 +228,59 @@ contract DispatcherTest is HookTestBase {
         return task;
     }
 
+    function test_CreateNewSwapTaskMultipleSwaps()
+        public
+        returns (IUniASSTaskManager.Task memory)
+    {
+        IASS.SwapTransactionData[]
+            memory swapTransactions = new IASS.SwapTransactionData[](2);
+        IASS.SwapTransactionData memory data = IASS.SwapTransactionData(
+            swapper.addr,
+            key,
+            IPoolManager.SwapParams(
+                true, // TOKEN1 -> TOKEN2
+                -int256(1 ether),
+                TickMath.MIN_SQRT_PRICE + 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES,
+            address(TOKEN1),
+            address(TOKEN2)
+        );
+
+        IASS.SwapTransactionData memory data2 = IASS.SwapTransactionData(
+            swapper2.addr,
+            key,
+            IPoolManager.SwapParams(
+                false, // TOKEN1 -> TOKEN2
+                -int256(1 ether),
+                TickMath.MAX_SQRT_PRICE - 1
+            ),
+            HookEnabledSwapRouter.TestSettings(false, false),
+            ZERO_BYTES,
+            address(TOKEN1),
+            address(TOKEN2)
+        );
+        swapTransactions[0] = data;
+        swapTransactions[1] = data2;
+
+        bytes[] memory transactionSignatures = new bytes[](2);
+        transactionSignatures[0] = swapper.signPacked(
+            hook.hashSwapTransactionData(swapTransactions[0])
+        );
+        transactionSignatures[1] = swapper2.signPacked(
+            hook.hashSwapTransactionData(swapTransactions[1])
+        );
+
+        vm.prank(generator);
+        IUniASSTaskManager.Task memory task = tm.createSwapTask(
+            swapTransactions,
+            transactionSignatures
+        );
+        assertEq(tm.latestTaskNum(), 1);
+        return task;
+    }
+
     function test_watchtower_rebalance() public {
         test_addLiquidity();
 
@@ -238,6 +295,27 @@ contract DispatcherTest is HookTestBase {
         tm.respondToTask(task, taskResponse);
 
         assertEqBalanceState(swapper.addr, 0, 921161300970596286);
+    }
+
+    function test_watchtower_rebalance_multiple_swap() public {
+        test_addLiquidity();
+
+        IUniASSTaskManager.Task
+            memory task = test_CreateNewSwapTaskMultipleSwaps();
+
+        deal(address(TOKEN1), address(swapper.addr), 1 ether);
+        assertEqBalanceState(swapper.addr, 1 ether, 0);
+
+        deal(address(TOKEN2), address(swapper2.addr), 1 ether);
+        assertEqBalanceState(swapper2.addr, 0, 1 ether);
+
+        IUniASSTaskManager.TaskResponse memory taskResponse = IUniASSTaskManager
+            .TaskResponse(0, address(router));
+        vm.prank(aggregator);
+        tm.respondToTask(task, taskResponse);
+
+        assertEqBalanceState(swapper.addr, 0, 921161300970596286);
+        assertEqBalanceState(swapper2.addr, 1072647465517080803, 0);
     }
 
     // -- Helpers --

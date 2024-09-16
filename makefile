@@ -1,6 +1,6 @@
-ta:
+test_all:
 	clear && forge test -vv
-tl:
+test_all_verbose:
 	clear && forge test -vvvv
 
 spell:

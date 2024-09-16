@@ -1,20 +1,25 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.9;
 
-import "../lib/eigenlayer-middleware/lib/openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
-import "../lib/eigenlayer-middleware/lib/openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import "../lib/eigenlayer-middleware/lib/eigenlayer-contracts/src/contracts/permissions/Pausable.sol";
-import "../lib/eigenlayer-middleware/src/interfaces/IServiceManager.sol";
-import {BLSApkRegistry} from "../lib/eigenlayer-middleware/src/BLSApkRegistry.sol";
-import {RegistryCoordinator} from "../lib/eigenlayer-middleware/src/RegistryCoordinator.sol";
-import {BLSSignatureChecker, IRegistryCoordinator} from "../lib/eigenlayer-middleware/src/BLSSignatureChecker.sol";
-import {OperatorStateRetriever} from "../lib/eigenlayer-middleware/src/OperatorStateRetriever.sol";
-import "../lib/eigenlayer-middleware/src/libraries/BN254.sol";
+import "@openzeppelin-upgrades/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin-upgrades/contracts/access/OwnableUpgradeable.sol";
+import "../../../lib/eigenlayer-middleware/lib/eigenlayer-contracts/src/contracts/permissions/Pausable.sol";
+import "@eigenlayer-middleware/src/interfaces/IServiceManager.sol";
+import {BLSApkRegistry} from "@eigenlayer-middleware/src/BLSApkRegistry.sol";
+import {PoolKey} from "../../../lib/v4-core/src/types/PoolKey.sol";
+import {RegistryCoordinator} from "@eigenlayer-middleware/src/RegistryCoordinator.sol";
+import {BLSSignatureChecker, IRegistryCoordinator} from "@eigenlayer-middleware/src/BLSSignatureChecker.sol";
+import {OperatorStateRetriever} from "@eigenlayer-middleware/src/OperatorStateRetriever.sol";
+import "@eigenlayer-middleware/src/libraries/BN254.sol";
 import "./IUniASSTaskManager.sol";
 
-// import "../../../src/interfaces/IASS.sol";
+import {HookEnabledSwapRouter} from "../../../test/libraries/HookEnabledSwapRouter.sol";
+import {IERC20Minimal} from "../../../lib/v4-core/src/interfaces/external/IERC20Minimal.sol";
+import "../../../src/interfaces/IASS.sol";
 
-import "../lib/forge-std/src/console.sol";
+import {BalanceDelta} from "../../../lib/v4-core/src/types/BalanceDelta.sol";
+
+import "forge-std/console.sol";
 
 contract UniASSTaskManager is
     Initializable,
@@ -26,10 +31,13 @@ contract UniASSTaskManager is
 {
     using BN254 for BN254.G1Point;
 
-    /* CONSTANT */
+    error OrderSignatureMismatch();
+
     // The number of blocks from the task initialization within which the aggregator has to respond to
     uint32 public immutable TASK_RESPONSE_WINDOW_BLOCK = 100;
 
+    address public constant poolManager =
+        0x1aF7f588A501EA2B5bB3feeFA744892aA2CF00e6;
     /* STORAGE */
     // The latest task index
     uint32 public latestTaskNum;
@@ -38,16 +46,11 @@ contract UniASSTaskManager is
 
     IASS public assHook;
 
-    // mapping of task indices to all tasks hashes
-    // when a task is created, task hash is stored here,
-    // and responses need to pass the actual task,
-    // which is hashed onchain and checked against this mapping
     mapping(uint32 => bytes32) public allTaskHashes;
 
     // mapping of task indices to hash of abi.encode(taskResponse, taskResponseMetadata)
     mapping(uint32 => bytes32) public allTaskResponses;
 
-    /* MODIFIERS */
     modifier onlyAggregator() {
         require(msg.sender == aggregator, "Aggregator must be the caller");
         _;
@@ -87,32 +90,52 @@ contract UniASSTaskManager is
         generator = newGenerator;
     }
 
-    // Anybody could call it, but the task will be emitted for all keepers to take
-    // Also the calling keeper will have a time window to respond to the task
-    function createRebalanceTask() external {
-        for (uint256 i = 0; i < assHook.optionIdCounter(); i++) {
-            PoolKey memory key = assHook.getOptionInfo(i).key;
-            if (assHook.isPriceRebalance(key, i)) {
-                createNewTask(i, msg.sender);
-            }
+    function createSwapTask(
+        IASS.SwapTransactionData[] memory swapTransactions,
+        bytes[] memory transactionSignatures
+    ) external onlyTaskGenerator returns (Task memory) {
+        for (uint256 i = 0; i < swapTransactions.length; i++) {
+            IASS.SwapTransactionData memory data = swapTransactions[i];
+            if (
+                !assHook.verifyOrder(
+                    data.sender,
+                    data,
+                    transactionSignatures[i]
+                )
+            ) revert OrderSignatureMismatch();
+            IERC20Minimal(data.token0).approve(poolManager, type(uint256).max);
+            IERC20Minimal(data.token1).approve(poolManager, type(uint256).max);
         }
+
+        return _createNewTask(swapTransactions, transactionSignatures);
     }
 
     /* FUNCTIONS */
     // NOTE: this function creates new auction task, assigns it a taskId
-    function createNewTask(uint256 optionId, address firstResponder) public {
+    function createNewTask(
+        IASS.SwapTransactionData[] memory swapTransactions,
+        bytes[] memory transactionSignatures
+    ) public onlyTaskGenerator {
+        _createNewTask(swapTransactions, transactionSignatures);
+    }
+
+    function _createNewTask(
+        IASS.SwapTransactionData[] memory swapTransactions,
+        bytes[] memory transactionSignatures
+    ) internal returns (Task memory) {
         console.log("createNewTask");
         // create a new task struct
         Task memory newTask;
-        newTask.optionId = optionId;
-        newTask.firstResponder = firstResponder;
+        newTask.swapTransactions = swapTransactions;
+        newTask.transactionSignatures = transactionSignatures;
         newTask.created = block.number;
 
         allTaskHashes[latestTaskNum] = keccak256(abi.encode(newTask));
 
-        emit NewTaskCreated(latestTaskNum, optionId);
+        emit NewTaskCreated(latestTaskNum, swapTransactions.length);
 
         latestTaskNum = latestTaskNum + 1;
+        return newTask;
     }
 
     // NOTE: this function responds to existing tasks.
@@ -120,12 +143,6 @@ contract UniASSTaskManager is
         Task calldata task,
         TaskResponse calldata taskResponse
     ) external onlyAggregator {
-        uint256 optionId = task.optionId;
-
-        require(
-            task.optionId == taskResponse.optionId,
-            "Error: optionId mismatch"
-        );
         require(
             keccak256(abi.encode(task)) ==
                 allTaskHashes[taskResponse.referenceTaskIndex],
@@ -136,16 +153,10 @@ contract UniASSTaskManager is
             "Aggregator has already responded to the task"
         );
 
-        // Here is the logic what allows only firstResponder to respond to the task in the given time window
-        // After this anybody could respond. Also firstResponder should be penalized if not responded in time
-        require(
-            task.firstResponder == msg.sender &&
-                block.timestamp < task.created + TASK_RESPONSE_WINDOW_BLOCK,
-            "Only first responder can respond to the task"
-        );
+        getSwapAmountsIn(task.swapTransactions);
+        dispatchAllSwap(task.swapTransactions, taskResponse);
 
         TaskResponseMetadata memory taskResponseMetadata = TaskResponseMetadata(
-            optionId,
             block.timestamp
         );
         // updating the storage with task responsea
@@ -155,6 +166,55 @@ contract UniASSTaskManager is
 
         // emitting event
         emit TaskResponded(taskResponse, taskResponseMetadata);
+    }
+
+    function getSwapAmountsIn(
+        IASS.SwapTransactionData[] memory swapTransactions
+    ) internal {
+        for (uint256 i = 0; i < swapTransactions.length; i++) {
+            IASS.SwapTransactionData memory data = swapTransactions[i];
+            uint256 amountSpecified = data.params.amountSpecified < 0
+                ? uint256(-data.params.amountSpecified)
+                : uint256(data.params.amountSpecified);
+            // console.log(">", amountSpecified);
+            // console.log(">", data.params.zeroForOne);
+            if (data.params.zeroForOne == true) {
+                IERC20Minimal(data.token0).transferFrom(
+                    data.sender,
+                    address(this),
+                    amountSpecified
+                );
+            } else {
+                IERC20Minimal(data.token1).transferFrom(
+                    data.sender,
+                    address(this),
+                    amountSpecified
+                );
+            }
+        }
+    }
+
+    function dispatchAllSwap(
+        IASS.SwapTransactionData[] memory swapTransactions,
+        TaskResponse calldata taskResponse
+    ) internal {
+        for (uint256 i = 0; i < swapTransactions.length; i++) {
+            IASS.SwapTransactionData memory data = swapTransactions[i];
+            BalanceDelta delta = HookEnabledSwapRouter(taskResponse.router)
+                .swap(data.key, data.params, data.testSettings, data.hookData);
+
+            if (data.params.zeroForOne == true) {
+                IERC20Minimal(data.token1).transfer(
+                    data.sender,
+                    uint256(uint128(delta.amount1()))
+                );
+            } else {
+                IERC20Minimal(data.token0).transfer(
+                    data.sender,
+                    uint256(uint128(delta.amount0()))
+                );
+            }
+        }
     }
 
     function taskNumber() external view returns (uint32) {

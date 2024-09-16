@@ -55,8 +55,9 @@ contract HookEnabledSwapRouter is PoolTestBase {
         );
 
         uint256 ethBalance = address(this).balance;
-        if (ethBalance > 0)
+        if (ethBalance > 0) {
             CurrencyLibrary.NATIVE.transfer(msg.sender, ethBalance);
+        }
     }
 
     function unlockCallback(
@@ -68,8 +69,8 @@ contract HookEnabledSwapRouter is PoolTestBase {
 
         BalanceDelta delta = manager.swap(data.key, data.params, data.hookData);
 
-        console.log("> amount0", uint256(int256(delta.amount0())));
-        console.log("> amount1", uint256(int256(delta.amount1())));
+        // console.log("> amount0", uint256(int256(delta.amount0())));
+        // console.log("> amount1", uint256(int256(delta.amount1())));
 
         // Make sure you ve added liquidity to the test pool!
         if (BalanceDelta.unwrap(delta) == 0) revert NoSwapOccurred();

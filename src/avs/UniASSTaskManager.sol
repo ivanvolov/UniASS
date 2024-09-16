@@ -176,8 +176,8 @@ contract UniASSTaskManager is
             uint256 amountSpecified = data.params.amountSpecified < 0
                 ? uint256(-data.params.amountSpecified)
                 : uint256(data.params.amountSpecified);
-            console.log(">", amountSpecified);
-            console.log(">", data.params.zeroForOne);
+            // console.log(">", amountSpecified);
+            // console.log(">", data.params.zeroForOne);
             if (data.params.zeroForOne == true) {
                 IERC20Minimal(data.token0).transferFrom(
                     data.sender,

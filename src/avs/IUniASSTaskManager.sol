@@ -20,10 +20,12 @@ interface IUniASSTaskManager {
         address firstResponder;
         uint256 created;
     }
+
     struct TaskResponse {
         uint32 referenceTaskIndex;
         address router;
     }
+
     struct TaskResponseMetadata {
         uint256 timestamp;
     }
