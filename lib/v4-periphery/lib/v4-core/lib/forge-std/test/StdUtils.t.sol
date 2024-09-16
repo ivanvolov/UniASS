@@ -5,10 +5,10 @@ import "../src/Test.sol";
 
 contract StdUtilsMock is StdUtils {
     // We deploy a mock version so we can properly test expected reverts.
-    function exposed_getTokenBalances(address token, address[] memory addresses)
-        external
-        returns (uint256[] memory balances)
-    {
+    function exposed_getTokenBalances(
+        address token,
+        address[] memory addresses
+    ) external returns (uint256[] memory balances) {
         return getTokenBalances(token, addresses);
     }
 
@@ -58,7 +58,7 @@ contract StdUtilsTest is Test {
     }
 
     function test_Bound_DistributionIsEven(uint256 min, uint256 size) public pure {
-        size = size % 100 + 1;
+        size = (size % 100) + 1;
         min = bound(min, UINT256_MAX / 2, UINT256_MAX / 2 + size);
         uint256 max = min + size - 1;
         uint256 result;
@@ -66,10 +66,10 @@ contract StdUtilsTest is Test {
         for (uint256 i = 1; i <= size * 4; ++i) {
             // x > max
             result = bound(max + i, min, max);
-            assertEq(result, min + (i - 1) % size);
+            assertEq(result, min + ((i - 1) % size));
             // x < min
             result = bound(min - i, min, max);
-            assertEq(result, max - (i - 1) % size);
+            assertEq(result, max - ((i - 1) % size));
         }
     }
 
@@ -147,7 +147,7 @@ contract StdUtilsTest is Test {
     }
 
     function test_BoundInt_DistributionIsEven(int256 min, uint256 size) public pure {
-        size = size % 100 + 1;
+        size = (size % 100) + 1;
         min = bound(min, -int256(size / 2), int256(size - size / 2));
         int256 max = min + int256(size) - 1;
         int256 result;
@@ -212,7 +212,7 @@ contract StdUtilsTest is Test {
         assertEq(boundPrivateKey(SECP256K1_ORDER - 1), SECP256K1_ORDER - 1);
         assertEq(boundPrivateKey(SECP256K1_ORDER), 1);
         assertEq(boundPrivateKey(SECP256K1_ORDER + 1), 2);
-        assertEq(boundPrivateKey(UINT256_MAX), UINT256_MAX & SECP256K1_ORDER - 1); // x&y is equivalent to x-x%y
+        assertEq(boundPrivateKey(UINT256_MAX), UINT256_MAX & (SECP256K1_ORDER - 1)); // x&y is equivalent to x-x%y
     }
 
     /*//////////////////////////////////////////////////////////////////////////
@@ -280,9 +280,9 @@ contract StdUtilsForkTest is Test {
     address internal SHIB_HOLDER_1 = 0x8F509A90c2e47779cA408Fe00d7A72e359229AdA;
     address internal SHIB_HOLDER_2 = 0x0e3bbc0D04fF62211F71f3e4C45d82ad76224385;
 
-    address internal USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-    address internal USDC_HOLDER_0 = 0xDa9CE944a37d218c3302F6B82a094844C6ECEb17;
-    address internal USDC_HOLDER_1 = 0x3e67F4721E6d1c41a015f645eFa37BEd854fcf52;
+    address internal TOKEN2 = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address internal TOKEN2_HOLDER_0 = 0xDa9CE944a37d218c3302F6B82a094844C6ECEb17;
+    address internal TOKEN2_HOLDER_1 = 0x3e67F4721E6d1c41a015f645eFa37BEd854fcf52;
 
     function setUp() public {
         // All tests of the `getTokenBalances` method are fork tests using live contracts.
@@ -297,7 +297,7 @@ contract StdUtilsForkTest is Test {
         // so the `balanceOf` call should revert.
         address token = address(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
         address[] memory addresses = new address[](1);
-        addresses[0] = USDC_HOLDER_0;
+        addresses[0] = TOKEN2_HOLDER_0;
 
         vm.expectRevert("Multicall3: call failed");
         stdUtils.exposed_getTokenBalances(token, addresses);
@@ -309,22 +309,22 @@ contract StdUtilsForkTest is Test {
 
         address eoa = vm.addr({privateKey: 1});
         address[] memory addresses = new address[](1);
-        addresses[0] = USDC_HOLDER_0;
+        addresses[0] = TOKEN2_HOLDER_0;
         vm.expectRevert("StdUtils getTokenBalances(address,address[]): Token address is not a contract.");
         stdUtils.exposed_getTokenBalances(eoa, addresses);
     }
 
     function test_GetTokenBalances_Empty() external {
         address[] memory addresses = new address[](0);
-        uint256[] memory balances = getTokenBalances(USDC, addresses);
+        uint256[] memory balances = getTokenBalances(TOKEN2, addresses);
         assertEq(balances.length, 0);
     }
 
-    function test_GetTokenBalances_USDC() external {
+    function test_GetTokenBalances_TOKEN2() external {
         address[] memory addresses = new address[](2);
-        addresses[0] = USDC_HOLDER_0;
-        addresses[1] = USDC_HOLDER_1;
-        uint256[] memory balances = getTokenBalances(USDC, addresses);
+        addresses[0] = TOKEN2_HOLDER_0;
+        addresses[1] = TOKEN2_HOLDER_1;
+        uint256[] memory balances = getTokenBalances(TOKEN2, addresses);
         assertEq(balances[0], 159_000_000_000_000);
         assertEq(balances[1], 131_350_000_000_000);
     }

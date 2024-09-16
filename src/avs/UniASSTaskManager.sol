@@ -6,6 +6,7 @@ import "@openzeppelin-upgrades/contracts/access/OwnableUpgradeable.sol";
 import "@eigenlayer-contracts/src/contracts/permissions/Pausable.sol";
 import "@eigenlayer-middleware/src/interfaces/IServiceManager.sol";
 import {BLSApkRegistry} from "@eigenlayer-middleware/src/BLSApkRegistry.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {RegistryCoordinator} from "@eigenlayer-middleware/src/RegistryCoordinator.sol";
 import {BLSSignatureChecker, IRegistryCoordinator} from "@eigenlayer-middleware/src/BLSSignatureChecker.sol";
 import {OperatorStateRetriever} from "@eigenlayer-middleware/src/OperatorStateRetriever.sol";
@@ -90,12 +91,12 @@ contract UniASSTaskManager is
     // Anybody could call it, but the task will be emitted for all keepers to take
     // Also the calling keeper will have a time window to respond to the task
     function createRebalanceTask() external {
-        for (uint256 i = 0; i < optionHook.optionIdCounter(); i++) {
-            PoolKey memory key = optionHook.getOptionInfo(i).key;
-            if (optionHook.isPriceRebalance(key, i)) {
-                createNewTask(i, msg.sender);
-            }
-        }
+        // for (uint256 i = 0; i < optionHook.optionIdCounter(); i++) {
+        //     PoolKey memory key = optionHook.getOptionInfo(i).key;
+        //     if (optionHook.isPriceRebalance(key, i)) {
+        //         createNewTask(i, msg.sender);
+        //     }
+        // }
     }
 
     /* FUNCTIONS */

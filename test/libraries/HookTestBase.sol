@@ -17,16 +17,16 @@ import {TestERC20} from "v4-core/test/TestERC20.sol";
 import {Deployers} from "v4-core-test/utils/Deployers.sol";
 import {HookEnabledSwapRouter} from "@test/libraries/HookEnabledSwapRouter.sol";
 import {TestAccount, TestAccountLib} from "@test/libraries/TestAccountLib.t.sol";
+import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 
 abstract contract HookTestBase is Test, Deployers {
     using TestAccountLib for TestAccount;
+    using CurrencyLibrary for Currency;
 
     IASS hook;
 
-    TestERC20 WSTETH;
-    TestERC20 USDC;
-    TestERC20 OSQTH;
-    TestERC20 WETH;
+    TestERC20 TOKEN1;
+    TestERC20 TOKEN2;
 
     TestAccount alice;
     TestAccount swapper;
@@ -34,14 +34,10 @@ abstract contract HookTestBase is Test, Deployers {
     HookEnabledSwapRouter router;
 
     function labelTokens() public {
-        WSTETH = TestERC20(OptionBaseLib.WSTETH);
-        vm.label(address(WSTETH), "WSTETH");
-        USDC = TestERC20(OptionBaseLib.USDC);
-        vm.label(address(USDC), "USDC");
-        OSQTH = TestERC20(OptionBaseLib.OSQTH);
-        vm.label(address(OSQTH), "OSQTH");
-        WETH = TestERC20(OptionBaseLib.WETH);
-        vm.label(address(WETH), "WETH");
+        TOKEN1 = new TestERC20(0);
+        vm.label(address(TOKEN1), "TOKEN1");
+        TOKEN2 = new TestERC20(0);
+        vm.label(address(TOKEN2), "TOKEN2");
     }
 
     function create_and_approve_accounts() public {
@@ -49,24 +45,42 @@ abstract contract HookTestBase is Test, Deployers {
         swapper = TestAccountLib.createTestAccount("swapper");
 
         vm.startPrank(alice.addr);
-        WSTETH.approve(address(hook), type(uint256).max);
-        USDC.approve(address(hook), type(uint256).max);
+        batchApprove(TOKEN1);
+        batchApprove(TOKEN2);
         vm.stopPrank();
 
         vm.startPrank(swapper.addr);
-        WSTETH.approve(address(router), type(uint256).max);
-        USDC.approve(address(router), type(uint256).max);
+        TOKEN1.approve(address(router), type(uint256).max);
+        TOKEN2.approve(address(router), type(uint256).max);
         vm.stopPrank();
+    }
+
+    function batchApprove(TestERC20 token) public {
+        address[10] memory toApprove = [
+            address(swapRouter),
+            address(hook),
+            address(swapRouterNoChecks),
+            address(modifyLiquidityRouter),
+            address(modifyLiquidityNoChecks),
+            address(manager),
+            address(donateRouter),
+            address(takeRouter),
+            address(claimsRouter),
+            address(nestedActionRouter.executor())
+        ];
+        for (uint256 i = 0; i < toApprove.length; i++) {
+            token.approve(toApprove[i], type(uint256).max);
+        }
     }
 
     // -- Uniswap V4 -- //
 
-    function swapUSDC_WSTETH_Out(uint256 amountOut) public {
+    function swapTOKEN2_TOKEN1_Out(uint256 amountOut) public {
         vm.prank(swapper.addr);
         router.swap(
             key,
             IPoolManager.SwapParams(
-                false, // USDC -> WSTETH
+                false, // TOKEN2 -> TOKEN1
                 int256(amountOut),
                 TickMath.MAX_SQRT_PRICE - 1
             ),
@@ -75,12 +89,12 @@ abstract contract HookTestBase is Test, Deployers {
         );
     }
 
-    function swapWSTETH_USDC_Out(uint256 amountOut) public {
+    function swapTOKEN1_TOKEN2_Out(uint256 amountOut) public {
         vm.prank(swapper.addr);
         router.swap(
             key,
             IPoolManager.SwapParams(
-                true, // WSTETH -> USDC
+                true, // TOKEN1 -> TOKEN2
                 int256(amountOut),
                 TickMath.MIN_SQRT_PRICE + 1
             ),
@@ -92,65 +106,34 @@ abstract contract HookTestBase is Test, Deployers {
     // -- Custom assertions -- //
 
     function assertEqBalanceStateZero(address owner) public view {
-        assertEqBalanceState(owner, 0, 0, 0, 0);
+        assertEqBalanceState(owner, 0, 0, 0);
     }
 
     function assertEqBalanceState(
         address owner,
-        uint256 _balanceWSTETH,
-        uint256 _balanceUSDC
+        uint256 _balanceTOKEN1,
+        uint256 _balanceTOKEN2
     ) public view {
-        assertEqBalanceState(owner, _balanceWSTETH, _balanceUSDC, 0, 0);
+        assertEqBalanceState(owner, _balanceTOKEN1, _balanceTOKEN2, 0);
     }
 
     function assertEqBalanceState(
         address owner,
-        uint256 _balanceWSTETH,
-        uint256 _balanceUSDC,
-        uint256 _balanceWETH,
-        uint256 _balanceOSQTH
-    ) public view {
-        assertEqBalanceState(
-            owner,
-            _balanceWSTETH,
-            _balanceUSDC,
-            _balanceWETH,
-            _balanceOSQTH,
-            0
-        );
-    }
-
-    function assertEqBalanceState(
-        address owner,
-        uint256 _balanceWSTETH,
-        uint256 _balanceUSDC,
-        uint256 _balanceWETH,
-        uint256 _balanceOSQTH,
+        uint256 _balanceTOKEN1,
+        uint256 _balanceTOKEN2,
         uint256 _balanceETH
     ) public view {
         assertApproxEqAbs(
-            USDC.balanceOf(owner),
-            _balanceUSDC,
+            TOKEN1.balanceOf(owner),
+            _balanceTOKEN1,
             10,
-            "Balance USDC not equal"
+            "Balance TOKEN1 not equal"
         );
         assertApproxEqAbs(
-            WETH.balanceOf(owner),
-            _balanceWETH,
+            TOKEN2.balanceOf(owner),
+            _balanceTOKEN2,
             10,
-            "Balance WETH not equal"
-        );
-        assertApproxEqAbs(
-            OSQTH.balanceOf(owner),
-            _balanceOSQTH,
-            10,
-            "Balance OSQTH not equal"
-        );
-        assertApproxEqAbs(
-            WSTETH.balanceOf(owner),
-            _balanceWSTETH,
-            10,
-            "Balance WSTETH not equal"
+            "Balance TOKEN2 not equal"
         );
 
         assertApproxEqAbs(

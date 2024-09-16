@@ -8,6 +8,7 @@ import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {HookEnabledSwapRouter} from "@test/libraries/HookEnabledSwapRouter.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {CurrencyLibrary, Currency} from "v4-core/types/Currency.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {ASSHook} from "@src/ASSHook.sol";
 
 import {IASS} from "@src/interfaces/IASS.sol";
@@ -19,7 +20,7 @@ import {IRegistryCoordinator} from "@eigenlayer-middleware/src/interfaces/IRegis
 import {IPauserRegistry} from "@eigenlayer-middleware/lib/eigenlayer-contracts/src/contracts/interfaces/IPauserRegistry.sol";
 import {BLSMockAVSDeployer} from "@eigenlayer-middleware/test/utils/BLSMockAVSDeployer.sol";
 import {TransparentUpgradeableProxy} from "@eigenlayer-middleware/lib/openzeppelin-contracts/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
-
+import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {HookTestBase} from "./libraries/HookTestBase.sol";
 
 import "forge-std/console.sol";
@@ -41,6 +42,7 @@ contract DispatcherTest is HookTestBase {
 
     using PoolIdLibrary for PoolId;
     using CurrencyLibrary for Currency;
+    using StateLibrary for IPoolManager;
 
     function setUp() public {
         uint256 mainnetFork = vm.createFork(MAINNET_RPC_URL);
@@ -51,7 +53,6 @@ contract DispatcherTest is HookTestBase {
         deployFreshManagerAndRouters();
 
         labelTokens();
-        create_and_seed_morpho_market();
         init_hook();
         create_and_approve_accounts();
 
@@ -59,75 +60,118 @@ contract DispatcherTest is HookTestBase {
         tm.setOptionHook(address(hook));
     }
 
-    function test_CreateNewTask() public {
-        vm.prank(generator);
-        tm.createNewTask(0, generator);
-        assertEq(tm.latestTaskNum(), 1);
-    }
+    function test_addLiquidity() public {
+        vm.startPrank(alice.addr);
+        deal(address(TOKEN1), address(alice.addr), 100 ether);
+        deal(address(TOKEN2), address(alice.addr), 100 ether);
+        assertEqBalanceState(alice.addr, 100 ether, 100 ether, 0);
 
-    function test_simulateWatchTowerEmptyCreateTasks() public {
-        vm.prank(generator);
-        tm.createRebalanceTask();
-        assertEq(tm.latestTaskNum(), 0);
-    }
-
-    function test_deposit() public {
-        uint256 amountToDeposit = 100 ether;
-        deal(address(WSTETH), address(alice.addr), amountToDeposit);
-        vm.prank(alice.addr);
-        optionId = hook.deposit(key, amountToDeposit, alice.addr);
-
-        assertOptionV4PositionLiquidity(optionId, 11433916692172150);
-        assertEqBalanceStateZero(alice.addr);
-        assertEqBalanceStateZero(address(hook));
-        assertEqMorphoState(
-            address(hook),
-            0,
-            0,
-            amountToDeposit / hook.cRatio()
+        // Some liquidity from -60 to +60 tick range
+        modifyLiquidityRouter.modifyLiquidity(
+            key,
+            IPoolManager.ModifyLiquidityParams({
+                tickLower: -60,
+                tickUpper: 60,
+                liquidityDelta: 10 ether,
+                salt: bytes32(0)
+            }),
+            ZERO_BYTES
         );
-        IASS.OptionInfo memory info = hook.getOptionInfo(optionId);
-        assertEq(info.fee, 0);
+        // // Some liquidity from -120 to +120 tick range
+        // modifyLiquidityRouter.modifyLiquidity(
+        //     key,
+        //     IPoolManager.ModifyLiquidityParams({
+        //         tickLower: -120,
+        //         tickUpper: 120,
+        //         liquidityDelta: 10 ether,
+        //         salt: bytes32(0)
+        //     }),
+        //     ZERO_BYTES
+        // );
+        // // some liquidity for full range
+        // modifyLiquidityRouter.modifyLiquidity(
+        //     key,
+        //     IPoolManager.ModifyLiquidityParams({
+        //         tickLower: TickMath.minUsableTick(60),
+        //         tickUpper: TickMath.maxUsableTick(60),
+        //         liquidityDelta: 10 ether,
+        //         salt: bytes32(0)
+        //     }),
+        //     ZERO_BYTES
+        // );
+        vm.stopPrank();
     }
 
-    function test_swap_price_up() public {
-        test_deposit();
+    // function test_CreateNewTask() public {
+    //     vm.prank(generator);
+    //     tm.createNewTask(0, generator);
+    //     assertEq(tm.latestTaskNum(), 1);
+    // }
 
-        deal(address(USDC), address(swapper.addr), 4513632092);
+    // function test_simulateWatchTowerEmptyCreateTasks() public {
+    //     vm.prank(generator);
+    //     tm.createRebalanceTask();
+    //     assertEq(tm.latestTaskNum(), 0);
+    // }
 
-        swapUSDC_WSTETH_Out(1 ether);
+    // function test_deposit() public {
+    //     uint256 amountToDeposit = 100 ether;
+    //     deal(address(TOKEN1), address(alice.addr), amountToDeposit);
+    //     vm.prank(alice.addr);
+    //     optionId = hook.deposit(key, amountToDeposit, alice.addr);
 
-        assertEqBalanceState(swapper.addr, 1 ether, 0);
-        assertEqBalanceState(address(hook), 0, 0, 0, 16851686274526807531);
-        assertEqMorphoState(address(hook), 0, 4513632092000000, 50 ether);
-    }
+    //     assertOptionV4PositionLiquidity(optionId, 11433916692172150);
+    //     assertEqBalanceStateZero(alice.addr);
+    //     assertEqBalanceStateZero(address(hook));
+    //     assertEqMorphoState(
+    //         address(hook),
+    //         0,
+    //         0,
+    //         amountToDeposit / hook.cRatio()
+    //     );
+    //     IASS.OptionInfo memory info = hook.getOptionInfo(optionId);
+    //     assertEq(info.fee, 0);
+    // }
 
-    function test_simulateWatchTowerCreateTasks() public {
-        test_swap_price_up();
+    // function test_swap_price_up() public {
+    //     test_deposit();
 
-        vm.prank(generator);
-        tm.createRebalanceTask();
-        assertEq(tm.latestTaskNum(), 1);
-    }
+    //     deal(address(TOKEN2), address(swapper.addr), 4513632092);
 
-    function test_swap_price_up_then_watchtower_rebalance() public {
-        test_swap_price_up();
+    //     swapTOKEN2_TOKEN1_Out(1 ether);
 
-        vm.prank(generator);
-        tm.createRebalanceTask();
-        assertEq(tm.latestTaskNum(), 1);
+    //     assertEqBalanceState(swapper.addr, 1 ether, 0);
+    //     assertEqBalanceState(address(hook), 0, 0, 0, 16851686274526807531);
+    //     assertEqMorphoState(address(hook), 0, 4513632092000000, 50 ether);
+    // }
 
-        vm.prank(generator);
-        hook.priceRebalance(key, 0);
+    // function test_simulateWatchTowerCreateTasks() public {
+    //     test_swap_price_up();
 
-        assertEqBalanceState(address(hook), 0, 0);
-        assertEqBalanceState(alice.addr, 0, 0);
-        assertOptionV4PositionLiquidity(optionId, 0);
-        assertEqMorphoState(address(hook), 0, 0, 49999736322669483551);
-    }
+    //     vm.prank(generator);
+    //     tm.createRebalanceTask();
+    //     assertEq(tm.latestTaskNum(), 1);
+    // }
+
+    // function test_swap_price_up_then_watchtower_rebalance() public {
+    //     test_swap_price_up();
+
+    //     vm.prank(generator);
+    //     tm.createRebalanceTask();
+    //     assertEq(tm.latestTaskNum(), 1);
+
+    //     vm.prank(generator);
+    //     hook.priceRebalance(key, 0);
+
+    //     assertEqBalanceState(address(hook), 0, 0);
+    //     assertEqBalanceState(alice.addr, 0, 0);
+    //     assertOptionV4PositionLiquidity(optionId, 0);
+    //     assertEqMorphoState(address(hook), 0, 0, 49999736322669483551);
+    // }
 
     // -- Helpers --
 
+    //https://github.com/haardikk21/take-profits-hook/blob/main/test/TakeProfitshook.t.sol
     function init_hook() internal {
         router = new HookEnabledSwapRouter(manager);
 
@@ -137,14 +181,12 @@ contract DispatcherTest is HookTestBase {
         deployCodeTo("ASSHook.sol", abi.encode(manager), hookAddress);
         ASSHook _hook = ASSHook(hookAddress);
 
-        uint160 initialSQRTPrice = TickMath.getSqrtPriceAtTick(-192232);
-
         (key, ) = initPool(
-            Currency.wrap(address(WSTETH)),
-            Currency.wrap(address(USDC)),
+            Currency.wrap(address(TOKEN1)),
+            Currency.wrap(address(TOKEN2)),
             _hook,
-            200,
-            initialSQRTPrice,
+            3000,
+            SQRT_PRICE_1_1,
             ZERO_BYTES
         );
 

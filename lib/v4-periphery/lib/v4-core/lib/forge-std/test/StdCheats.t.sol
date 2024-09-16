@@ -87,7 +87,7 @@ contract StdCheatsTest is Test {
     }
 
     function test_MakeAddrEquivalence() public {
-        (address addr,) = makeAddrAndKey("1337");
+        (address addr, ) = makeAddrAndKey("1337");
         assertEq(makeAddr("1337"), addr);
     }
 
@@ -402,16 +402,18 @@ contract StdCheatsTest is Test {
     function testFuzz_AssumeNotPrecompile(address addr) external {
         assumeNotPrecompile(addr, getChain("optimism_sepolia").chainId);
         assertTrue(
-            addr < address(1) || (addr > address(9) && addr < address(0x4200000000000000000000000000000000000000))
-                || addr > address(0x4200000000000000000000000000000000000800)
+            addr < address(1) ||
+                (addr > address(9) && addr < address(0x4200000000000000000000000000000000000000)) ||
+                addr > address(0x4200000000000000000000000000000000000800)
         );
     }
 
     function testFuzz_AssumeNotForgeAddress(address addr) external pure {
         assumeNotForgeAddress(addr);
         assertTrue(
-            addr != address(vm) && addr != 0x000000000000000000636F6e736F6c652e6c6f67
-                && addr != 0x4e59b44847b379578588920cA78FbF26c0B4956C
+            addr != address(vm) &&
+                addr != 0x000000000000000000636F6e736F6c652e6c6f67 &&
+                addr != 0x4e59b44847b379578588920cA78FbF26c0B4956C
         );
     }
 
@@ -460,8 +462,8 @@ contract StdCheatsMock is StdCheats {
 
 contract StdCheatsForkTest is Test {
     address internal constant SHIB = 0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE;
-    address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
-    address internal constant USDC_BLACKLISTED_USER = 0x1E34A77868E19A6647b1f2F47B51ed72dEDE95DD;
+    address internal constant TOKEN2 = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address internal constant TOKEN2_BLACKLISTED_USER = 0x1E34A77868E19A6647b1f2F47B51ed72dEDE95DD;
     address internal constant USDT = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
     address internal constant USDT_BLACKLISTED_USER = 0x8f8a8F4B54a2aAC7799d7bc81368aC27b852822A;
 
@@ -483,16 +485,16 @@ contract StdCheatsForkTest is Test {
         assertTrue(true);
     }
 
-    function test_AssumeNoBlacklisted_USDC() external {
+    function test_AssumeNoBlacklisted_TOKEN2() external {
         // We deploy a mock version so we can properly test the revert.
         StdCheatsMock stdCheatsMock = new StdCheatsMock();
         vm.expectRevert();
-        stdCheatsMock.exposed_assumeNotBlacklisted(USDC, USDC_BLACKLISTED_USER);
+        stdCheatsMock.exposed_assumeNotBlacklisted(TOKEN2, TOKEN2_BLACKLISTED_USER);
     }
 
-    function testFuzz_AssumeNotBlacklisted_USDC(address addr) external view {
-        assumeNotBlacklisted(USDC, addr);
-        assertFalse(USDCLike(USDC).isBlacklisted(addr));
+    function testFuzz_AssumeNotBlacklisted_TOKEN2(address addr) external view {
+        assumeNotBlacklisted(TOKEN2, addr);
+        assertFalse(TOKEN2Like(TOKEN2).isBlacklisted(addr));
     }
 
     function test_AssumeNoBlacklisted_USDT() external {
@@ -507,13 +509,13 @@ contract StdCheatsForkTest is Test {
         assertFalse(USDTLike(USDT).isBlackListed(addr));
     }
 
-    function test_dealUSDC() external {
-        // roll fork to the point when USDC contract updated to store balance in packed slots
+    function test_dealTOKEN2() external {
+        // roll fork to the point when TOKEN2 contract updated to store balance in packed slots
         vm.rollFork(19279215);
 
         uint256 balance = 100e6;
-        deal(USDC, address(this), balance);
-        assertEq(IERC20(USDC).balanceOf(address(this)), balance);
+        deal(TOKEN2, address(this), balance);
+        assertEq(IERC20(TOKEN2).balanceOf(address(this)), balance);
     }
 }
 
@@ -587,7 +589,7 @@ contract BarERC721 {
     mapping(address => uint256) private _balances;
 }
 
-interface USDCLike {
+interface TOKEN2Like {
     function isBlacklisted(address) external view returns (bool);
 }
 

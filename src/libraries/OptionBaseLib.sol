@@ -8,17 +8,17 @@ import {OptionMathLib} from "@src/libraries/OptionMathLib.sol";
 library OptionBaseLib {
     error UnsupportedTokenPair();
 
-    address constant WSTETH = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
+    address constant TOKEN1 = 0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0;
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    address constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    address constant TOKEN2 = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     address constant OSQTH = 0xf1B99e3E573A1a9C5E6B2Ce818b617F0E664E86B;
 
     // ---- Uniswap V3 Swap related functions ----
 
-    uint24 public constant WSTETH_USDC_POOL_FEE = 500;
-    uint24 public constant WSTETH_ETH_POOL_FEE = 100;
+    uint24 public constant TOKEN1_TOKEN2_POOL_FEE = 500;
+    uint24 public constant TOKEN1_ETH_POOL_FEE = 100;
     uint24 public constant ETH_OSQTH_POOL_FEE = 3000;
-    uint24 public constant ETH_USDC_POOL_FEE = 500;
+    uint24 public constant ETH_TOKEN2_POOL_FEE = 500;
 
     function getFee(
         address tokenIn,
@@ -28,10 +28,10 @@ library OptionBaseLib {
             ? (tokenIn, tokenOut)
             : (tokenOut, tokenIn);
 
-        if (token0 == USDC && token1 == WSTETH) return WSTETH_USDC_POOL_FEE;
-        if (token0 == WETH && token1 == WSTETH) return WSTETH_ETH_POOL_FEE;
+        if (token0 == TOKEN2 && token1 == TOKEN1) return TOKEN1_TOKEN2_POOL_FEE;
+        if (token0 == WETH && token1 == TOKEN1) return TOKEN1_ETH_POOL_FEE;
         if (token0 == OSQTH && token1 == WETH) return ETH_OSQTH_POOL_FEE;
-        if (token0 == WETH && token1 == USDC) return ETH_USDC_POOL_FEE;
+        if (token0 == WETH && token1 == TOKEN2) return ETH_TOKEN2_POOL_FEE;
 
         revert UnsupportedTokenPair();
     }
@@ -85,7 +85,7 @@ library OptionBaseLib {
     }
 
     //** MultiRouteSwaps
-    /// @notice Part of this routes will change after setting up new pools like wstETH/OSQTH or USDC/OSQTH
+    /// @notice Part of this routes will change after setting up new pools like wstETH/OSQTH or TOKEN2/OSQTH
 
     function swapExactOutputPath(
         bytes memory path,
@@ -103,27 +103,29 @@ library OptionBaseLib {
             );
     }
 
-    function swapOSQTH_USDC_In(uint256 amountIn) internal returns (uint256) {
+    function swapOSQTH_TOKEN2_In(uint256 amountIn) internal returns (uint256) {
         return
-            swapExactInput(WETH, USDC, swapExactInput(OSQTH, WETH, amountIn));
+            swapExactInput(WETH, TOKEN2, swapExactInput(OSQTH, WETH, amountIn));
     }
 
-    function swapUSDC_OSQTH_In(uint256 amountIn) internal returns (uint256) {
+    function swapTOKEN2_OSQTH_In(uint256 amountIn) internal returns (uint256) {
         return
-            swapExactInput(WETH, OSQTH, swapExactInput(USDC, WETH, amountIn));
+            swapExactInput(WETH, OSQTH, swapExactInput(TOKEN2, WETH, amountIn));
     }
 
-    function swapOSQTH_WSTETH_In(uint256 amountIn) internal returns (uint256) {
+    function swapOSQTH_TOKEN1_In(uint256 amountIn) internal returns (uint256) {
         return
-            swapExactInput(WETH, WSTETH, swapExactInput(OSQTH, WETH, amountIn));
+            swapExactInput(WETH, TOKEN1, swapExactInput(OSQTH, WETH, amountIn));
     }
 
-    function swapOSQTH_USDC_Out(uint256 amountOut) internal returns (uint256) {
+    function swapOSQTH_TOKEN2_Out(
+        uint256 amountOut
+    ) internal returns (uint256) {
         return
             swapExactOutputPath(
                 abi.encodePacked(
-                    USDC,
-                    ETH_USDC_POOL_FEE,
+                    TOKEN2,
+                    ETH_TOKEN2_POOL_FEE,
                     WETH,
                     ETH_OSQTH_POOL_FEE,
                     OSQTH
@@ -132,15 +134,17 @@ library OptionBaseLib {
             );
     }
 
-    function swapUSDC_OSQTH_Out(uint256 amountOut) internal returns (uint256) {
+    function swapTOKEN2_OSQTH_Out(
+        uint256 amountOut
+    ) internal returns (uint256) {
         return
             swapExactOutputPath(
                 abi.encodePacked(
                     OSQTH,
                     ETH_OSQTH_POOL_FEE,
                     WETH,
-                    ETH_USDC_POOL_FEE,
-                    USDC
+                    ETH_TOKEN2_POOL_FEE,
+                    TOKEN2
                 ),
                 amountOut
             );
