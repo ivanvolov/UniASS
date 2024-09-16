@@ -1,5 +1,11 @@
 # uni-ASS
 
+## Setting up
+
+```
+forge install
+```
+
 ### Build
 
 ```shell
