@@ -72,7 +72,7 @@ contract ASSHook is BaseHook, IASS {
         IPoolManager.SwapParams calldata,
         bytes calldata
     ) external virtual override returns (bytes4, BeforeSwapDelta, uint24) {
-        // if (sender != dispatchers[address(this)]) revert NotDispatcher();
+        if (sender != dispatchers[address(this)]) revert NotDispatcher();
         return (ASSHook.beforeSwap.selector, BeforeSwapDelta.wrap(0), 0);
     }
 

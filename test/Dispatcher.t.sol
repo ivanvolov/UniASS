@@ -64,6 +64,8 @@ contract DispatcherTest is HookTestBase {
         TOKEN1.approve(address(tm), type(uint256).max);
         vm.prank(swapper.addr);
         TOKEN2.approve(address(tm), type(uint256).max);
+
+        console.log("Task Manager address", address(tm));
     }
 
     function test_addLiquidity() public {
@@ -229,10 +231,13 @@ contract DispatcherTest is HookTestBase {
 
         deal(address(TOKEN1), address(swapper.addr), 1 ether);
         assertEqBalanceState(swapper.addr, 1 ether, 0);
+
         IUniASSTaskManager.TaskResponse memory taskResponse = IUniASSTaskManager
             .TaskResponse(0, address(router));
         vm.prank(aggregator);
         tm.respondToTask(task, taskResponse);
+
+        assertEqBalanceState(swapper.addr, 0, 921161300970596286);
     }
 
     // -- Helpers --

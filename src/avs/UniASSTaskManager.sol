@@ -17,6 +17,8 @@ import {HookEnabledSwapRouter} from "@test/libraries/HookEnabledSwapRouter.sol";
 import {IERC20Minimal} from "v4-core/interfaces/external/IERC20Minimal.sol";
 import "@src/interfaces/IASS.sol";
 
+import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
+
 import "forge-std/console.sol";
 
 contract UniASSTaskManager is
@@ -34,6 +36,8 @@ contract UniASSTaskManager is
     // The number of blocks from the task initialization within which the aggregator has to respond to
     uint32 public immutable TASK_RESPONSE_WINDOW_BLOCK = 100;
 
+    address public constant poolManager =
+        0x1aF7f588A501EA2B5bB3feeFA744892aA2CF00e6;
     /* STORAGE */
     // The latest task index
     uint32 public latestTaskNum;
@@ -99,6 +103,8 @@ contract UniASSTaskManager is
                     transactionSignatures[i]
                 )
             ) revert OrderSignatureMismatch();
+            IERC20Minimal(data.token0).approve(poolManager, type(uint256).max);
+            IERC20Minimal(data.token1).approve(poolManager, type(uint256).max);
         }
 
         return _createNewTask(swapTransactions, transactionSignatures);
@@ -149,7 +155,6 @@ contract UniASSTaskManager is
 
         getSwapAmountsIn(task.swapTransactions);
         dispatchAllSwap(task.swapTransactions, taskResponse);
-        sendSwapAmountsOut(task.swapTransactions);
 
         TaskResponseMetadata memory taskResponseMetadata = TaskResponseMetadata(
             block.timestamp
@@ -189,42 +194,26 @@ contract UniASSTaskManager is
         }
     }
 
-    function sendSwapAmountsOut(
-        IASS.SwapTransactionData[] memory swapTransactions
-    ) internal {
-        // for (uint256 i = 0; i < swapTransactions.length; i++) {
-        //     IASS.SwapTransactionData memory data = swapTransactions[i];
-        //     uint256 amountSpecified = data.params.amountSpecified < 0
-        //         ? uint256(-data.params.amountSpecified)
-        //         : uint256(data.params.amountSpecified);
-        //     if (data.params.zeroForOne == true) {
-        //         IERC20Minimal(data.token0).transferFrom(
-        //             data.sender,
-        //             address(this),
-        //             amountSpecified
-        //         );
-        //     } else {
-        //         IERC20Minimal(data.token1).transferFrom(
-        //             data.sender,
-        //             address(this),
-        //             amountSpecified
-        //         );
-        //     }
-        // }
-    }
-
     function dispatchAllSwap(
         IASS.SwapTransactionData[] memory swapTransactions,
         TaskResponse calldata taskResponse
     ) internal {
         for (uint256 i = 0; i < swapTransactions.length; i++) {
             IASS.SwapTransactionData memory data = swapTransactions[i];
-            HookEnabledSwapRouter(taskResponse.router).swap(
-                data.key,
-                data.params,
-                data.testSettings,
-                data.hookData
-            );
+            BalanceDelta delta = HookEnabledSwapRouter(taskResponse.router)
+                .swap(data.key, data.params, data.testSettings, data.hookData);
+
+            if (data.params.zeroForOne == true) {
+                IERC20Minimal(data.token1).transfer(
+                    data.sender,
+                    uint256(uint128(delta.amount1()))
+                );
+            } else {
+                IERC20Minimal(data.token0).transfer(
+                    data.sender,
+                    uint256(uint128(delta.amount0()))
+                );
+            }
         }
     }
 

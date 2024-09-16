@@ -1,7 +1,7 @@
 ta:
-	forge test -vv
+	clear && forge test -vv
 tl:
-	forge test -vvvv
+	clear && forge test -vvvv
 
 spell:
 	cspell "**/*.*"
